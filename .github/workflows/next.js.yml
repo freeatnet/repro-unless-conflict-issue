@@ -1,0 +1,82 @@
+# This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
+
+name: Next.js CI
+
+on: [push, pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EDGEDB_INSTANCE_NAME: t3_template
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+    - run: yarn install --frozen-lockfile
+
+  lint:
+    needs: [install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    - uses: edgedb/setup-edgedb@v1
+      with:
+        instance-name: ${{ env.EDGEDB_INSTANCE_NAME }}
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+    - name: Set up the environment and install dependencies
+      run: cp .env.example .env && yarn install --offline --frozen-lockfile
+    - name: Initialize EdgeDB instance
+      run: edgedb project init --non-interactive --link --server-instance ${{ env.EDGEDB_INSTANCE_NAME }}
+    - run: yarn setup
+    - run: yarn lint:ci:all
+
+  typecheck:
+    needs: [install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    - uses: edgedb/setup-edgedb@v1
+      with:
+        instance-name: ${{ env.EDGEDB_INSTANCE_NAME }}
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+    - name: Set up the environment and install dependencies
+      run: cp .env.example .env && yarn install --offline --frozen-lockfile
+    - name: Initialize EdgeDB instance
+      run: edgedb project init --non-interactive --link --server-instance ${{ env.EDGEDB_INSTANCE_NAME }}
+    - run: yarn setup
+    - run: yarn tsc:typecheck

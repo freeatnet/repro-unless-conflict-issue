@@ -42,7 +42,7 @@ export default async function handler(
     {
       pages: e.array(e.tuple({ number: e.bigint, content: e.str })),
     },
-    (params) => {
+    () => {
       const upsertBook = e.assert_single(
         { message: "more than one book found after upsert" },
         e.assert_exists(
@@ -72,70 +72,10 @@ export default async function handler(
         )
       );
 
-      const paramsForUpdateLoop = e.for(e.array_unpack(params.pages), (page) =>
-        e.select(e.BookPage, (pageRef) => ({
-          pageParams: page,
-          filter: e.op(
-            e.op(pageRef.book.id, "=", upsertBook.id),
-            "and",
-            e.op(pageRef.number, "=", page.number)
-          ),
-        }))
-      ).pageParams;
-
-      const paramsForInsertLoop = e.for(e.array_unpack(params.pages), (page) =>
-        e.select({
-          pageParams: page,
-          filter: e.op(page, "not in", paramsForUpdateLoop),
-        })
-      ).pageParams;
-
-      const insertPages = e.for(paramsForInsertLoop, (page) =>
-        e.insert(e.BookPage, {
-          book: upsertBook,
-          number: page.number,
-          content: page.content,
-        })
-      );
-
-      const updatePages = e.op(
-        "distinct",
-        e.for(paramsForUpdateLoop, (page) =>
-          e.update(e.BookPage, (pageRef) => ({
-            set: { content: page.content },
-            filter: e.op(
-              e.op(pageRef.book.id, "=", upsertBook.id),
-              "and",
-              e.op(pageRef.number, "=", page.number)
-            ),
-          }))
-        )
-      );
-
-      const deletePages = e.delete(e.BookPage, (pageRef) => ({
-        filter: e.op(
-          e.op(pageRef.book.id, "=", upsertBook.id),
-          "and",
-          e.op(pageRef.number, "not in", e.array_unpack(params.pages).number)
-        ),
-      }));
-
       return e.with(
-        [
-          upsertBook,
-          paramsForUpdateLoop,
-          paramsForInsertLoop,
-          updatePages,
-          insertPages,
-          deletePages,
-        ],
+        [upsertBook],
         e.select({
           book: upsertBook,
-          paramsForUpdateLoop: paramsForUpdateLoop,
-          paramsForInsertLoop: paramsForInsertLoop,
-          updatePages: updatePages,
-          insertPages: insertPages,
-          deletePages: deletePages,
         })
       );
     }
@@ -148,15 +88,5 @@ export default async function handler(
   // eslint-disable-next-line no-console
   console.log(result);
 
-  res.json({
-    ...result,
-    paramsForUpdateLoop: result.paramsForUpdateLoop.map((params) => ({
-      ...params,
-      number: Number(params.number),
-    })),
-    paramsForInsertLoop: result.paramsForInsertLoop.map((params) => ({
-      ...params,
-      number: Number(params.number),
-    })),
-  });
+  res.json(result);
 }

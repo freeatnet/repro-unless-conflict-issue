@@ -23,6 +23,10 @@ module default {
     property description -> str;
     # ... some more props
 
+    property updateCount -> int64 {
+      default := 0;
+    };
+
     multi link pages := .<book[is BookPage];
   }
 

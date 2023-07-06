@@ -23,13 +23,6 @@ export default async function handler(
     title: input.bookSlug.replaceAll("-", " ").toUpperCase(),
   };
 
-  const pages = Array.from({ length: input.pageCount }, (_, i) =>
-    BigInt(i + 1)
-  ).map((number) => ({
-    number,
-    content: `page ${number} content at ${new Date().toISOString()}`,
-  }));
-
   const ensureAuthor = e
     .insert(e.User, {
       slug: authorSlug,
@@ -38,53 +31,67 @@ export default async function handler(
 
   await ensureAuthor.run(edgedbClient);
 
-  const upsertPages = e.params(
-    {
-      pages: e.array(e.tuple({ number: e.bigint, content: e.str })),
-    },
-    () => {
-      const upsertBook = e.assert_single(
-        { message: "more than one book found after upsert" },
-        e.assert_exists(
-          { message: "no book found after upsert" },
-          e.op(
-            e
-              .insert(e.Book, {
-                ...book,
-                author: e.assert_exists(
-                  { message: "no author found" },
-                  e.select(e.User, (userRef) => ({
-                    filter_single: e.op(userRef.slug, "=", authorSlug),
-                  }))
-                ),
-              })
-              .unlessConflict(),
-            "union",
-            e.update(e.Book, (bookRef) => ({
-              set: { ...book },
-              filter: e.op(
-                e.op(bookRef.author.slug, "=", authorSlug),
-                "and",
-                e.op(bookRef.slug, "=", book.slug)
-              ),
-            }))
-          )
-        )
-      );
-
-      return e.with(
-        [upsertBook],
-        e.select({
-          book: upsertBook,
-        })
-      );
-    }
+  const upsertBook = e.assert_single(
+    { message: "more than one book found after upsert" },
+    e.assert_exists(
+      { message: "no book found after upsert" },
+      e.op(
+        e
+          .insert(e.Book, {
+            ...book,
+            author: e.assert_exists(
+              { message: "no author found" },
+              e.select(e.User, (userRef) => ({
+                filter_single: e.op(userRef.slug, "=", authorSlug),
+              }))
+            ),
+          })
+          .unlessConflict(),
+        "union",
+        e.update(e.Book, (bookRef) => ({
+          set: { ...book },
+          filter: e.op(
+            e.op(bookRef.author.slug, "=", authorSlug),
+            "and",
+            e.op(bookRef.slug, "=", book.slug)
+          ),
+        }))
+      )
+    )
   );
 
   // eslint-disable-next-line no-console
-  console.log(upsertPages.toEdgeQL());
+  console.log(upsertBook.toEdgeQL());
 
-  const result = await upsertPages.run(edgedbClient, { pages });
+  /* Sample generated query:
+
+    std::assert_single(((INSERT default::Book {
+      slug := "foo-bar-75",
+      title := "FOO BAR 75",
+      author := (
+        std::assert_exists(std::assert_single((WITH
+          __scope_0_defaultUser := DETACHED default::User
+        SELECT __scope_0_defaultUser {
+          id
+        }
+        FILTER (__scope_0_defaultUser.slug = "the-author"))), message := "no author found")
+      )
+    }
+    UNLESS CONFLICT) union (WITH
+      __scope_1_defaultBook := DETACHED default::Book
+    UPDATE __scope_1_defaultBook
+    FILTER ((__scope_1_defaultBook.author.slug = "the-author") and (__scope_1_defaultBook.slug = "foo-bar-75"))
+    SET {
+      slug := "foo-bar-75",
+      title := "FOO BAR 75"
+    })), message := "more than one book found after upsert")
+
+  */
+
+  const result = await upsertBook.run(edgedbClient);
+  // Expected: { id: "..." }
+  // Observed: null if insert succeeds, { id: "..." } if update succeeds
+
   // eslint-disable-next-line no-console
   console.log(result);
 

@@ -72,39 +72,30 @@ export default async function handler(
         )
       );
 
-      const paramsForUpdateLoop = e.op(
-        "distinct",
-        e.for(e.array_unpack(params.pages), (page) =>
-          e.select(e.BookPage, (pageRef) => ({
-            pageParams: page,
-            filter: e.op(
-              e.op(pageRef.book.id, "=", upsertBook.id),
-              "and",
-              e.op(pageRef.number, "=", page.number)
-            ),
-          }))
-        )
+      const paramsForUpdateLoop = e.for(e.array_unpack(params.pages), (page) =>
+        e.select(e.BookPage, (pageRef) => ({
+          pageParams: page,
+          filter: e.op(
+            e.op(pageRef.book.id, "=", upsertBook.id),
+            "and",
+            e.op(pageRef.number, "=", page.number)
+          ),
+        }))
       ).pageParams;
 
-      const paramsForInsertLoop = e.op(
-        "distinct",
-        e.for(e.array_unpack(params.pages), (page) =>
-          e.select({
-            pageParams: page,
-            filter: e.op(page, "not in", paramsForUpdateLoop),
-          })
-        ).pageParams
-      );
+      const paramsForInsertLoop = e.for(e.array_unpack(params.pages), (page) =>
+        e.select({
+          pageParams: page,
+          filter: e.op(page, "not in", paramsForUpdateLoop),
+        })
+      ).pageParams;
 
-      const insertPages = e.op(
-        "distinct",
-        e.for(paramsForInsertLoop, (page) =>
-          e.insert(e.BookPage, {
-            book: upsertBook,
-            number: page.number,
-            content: page.content,
-          })
-        )
+      const insertPages = e.for(paramsForInsertLoop, (page) =>
+        e.insert(e.BookPage, {
+          book: upsertBook,
+          number: page.number,
+          content: page.content,
+        })
       );
 
       const updatePages = e.op(

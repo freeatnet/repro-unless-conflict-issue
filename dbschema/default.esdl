@@ -33,6 +33,7 @@ module default {
     required property number -> bigint;
 
     # ... some content properties
+    property content -> str;
 
     constraint exclusive on ((.book, .number));
   }
